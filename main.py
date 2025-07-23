@@ -50,16 +50,18 @@ class KeyboardFileManager(QMainWindow):
                 super().keyPressEvent(event)
 
     def move_to_parent(self):
-        """Переход к родительской папке"""
-        current_dir = QDir(self.current_path)
-        
-        # Получаем родительский путь
-        if current_dir.cdUp():  # Переходим на уровень выше
-            self.current_path = current_dir.absolutePath()
+        if self.current_path:
+            """Переход к родительской папке"""
+            current_dir = QDir(self.current_path)
+            
+            # Получаем родительский путь
+            if current_dir.cdUp():  # Переходим на уровень выше
+                self.current_path = current_dir.absolutePath()
+            else:
+                # Мы в корне файловой системы
+                self.current_path = str()
+            
             self.update_panels()
-        else:
-            # Мы в корне файловой системы
-            print("Достигнут корень файловой системы")
 
     def enter_selected(self):
         index = self.panels['center'].currentIndex()
@@ -75,31 +77,36 @@ class KeyboardFileManager(QMainWindow):
             self.panels["center"].setCurrentIndex(new_index)
 
     def update_panels(self):
+        if self.current_path:
+            self.panels["left"].setVisible(True)
+            # Получаем родительский путь
+            dir_obj = QDir(self.current_path)
+            if dir_obj.cdUp():  # Переходим на уровень выше
+                parent_path = dir_obj.absolutePath()
+                
+                # Левая панель (родительский каталог)
+                self.panels['left'].setRootIndex(self.model.index(parent_path))
+                
+                # Автовыбор текущей папки в левой панели
+                child_name = QDir(self.current_path).dirName()
+                parent_index = self.model.index(parent_path)
+                for i in range(self.model.rowCount(parent_index)):
+                    idx = self.model.index(i, 0, parent_index)
+                    if self.model.fileName(idx) == child_name:
+                        self.panels['left'].setCurrentIndex(idx)
+                        break
+            else:
+                # Если мы в корне (cdUp вернул False)
+                self.panels['left'].setRootIndex(self.model.index(""))
+        else:
+            self.panels["left"].setVisible(False)
+            
         # Центральная панель
         self.panels['center'].setRootIndex(self.model.index(self.current_path))
         
-        # Получаем родительский путь
-        dir_obj = QDir(self.current_path)
-        if dir_obj.cdUp():  # Переходим на уровень выше
-            parent_path = dir_obj.absolutePath()
-            
-            # Левая панель (родительский каталог)
-            self.panels['left'].setRootIndex(self.model.index(parent_path))
-            
-            # Автовыбор текущей папки в левой панели
-            child_name = QDir(self.current_path).dirName()
-            parent_index = self.model.index(parent_path)
-            for i in range(self.model.rowCount(parent_index)):
-                idx = self.model.index(i, 0, parent_index)
-                if self.model.fileName(idx) == child_name:
-                    self.panels['left'].setCurrentIndex(idx)
-                    break
-        else:
-            # Если мы в корне (cdUp вернул False)
-            self.panels['left'].setRootIndex(self.model.index(""))
-        
         # Правая панель (сбрасываем)
         self.panels['right'].setRootIndex(self.model.index(""))
+    
 
 if __name__ == "__main__":
     app = QApplication([])

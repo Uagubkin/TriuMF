@@ -16,3 +16,6 @@ __pycache__/
 
 # Системные файлы
 Thumbs.db
+
+# VSCode Workspace
+TriuMF.code-workspace
