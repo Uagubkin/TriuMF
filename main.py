@@ -1,14 +1,13 @@
 import sys
-from os import name as os_name
-from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QListView
-from PyQt6.QtGui import QFileSystemModel
-from PyQt6.QtCore import Qt, QDir
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSplitter, QListView, QAbstractItemView
+from PyQt6.QtGui import QFileSystemModel, QStandardItemModel
+from PyQt6.QtCore import Qt, QDir, QEvent
 from collections import OrderedDict
 
 class KeyboardFileManager(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Keyboard-Driven File Manager")
+        self.setWindowTitle("TriuMF")
         self.setGeometry(100, 100, 1200, 600)
         
         # 1. Модель файловой системы
@@ -25,6 +24,7 @@ class KeyboardFileManager(QMainWindow):
         
         for panel in self.panels.values():
             panel.setModel(self.model)
+            panel.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         
         # 3. Размещение панелей
         splitter = QSplitter()
@@ -34,6 +34,14 @@ class KeyboardFileManager(QMainWindow):
         
         # 4. Начальный путь (например, домашняя папка)
         self.current_path = QDir.homePath()
+        self.model.directoryLoaded.connect(self.update_panels)
+
+        self.panels['left'].setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.panels['center'].setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.panels['right'].setFocusPolicy(Qt.FocusPolicy.NoFocus)
+
+        self.panels['center'].installEventFilter(self)        
+
         self.update_panels()
 
     def keyPressEvent(self, event):
@@ -42,12 +50,17 @@ class KeyboardFileManager(QMainWindow):
                 self.move_to_parent()
             case Qt.Key.Key_Right:
                 self.enter_selected()
-            case Qt.Key.Key_Up:
-                self.move_cursor(-1)
-            case Qt.Key.Key_Down:
-                self.move_cursor(1)
             case _:  # Любая другая клавиша
                 super().keyPressEvent(event)
+
+    def eventFilter(self, obj, event):
+        if (obj == self.panels['center'] and event.type() == QEvent.Type.KeyPress):
+            if event.key() == Qt.Key.Key_Up:
+                self.move_cursor(-1)
+                return True
+            elif event.key() == Qt. Key.Key_Down:
+                self.move_cursor(1)
+        return super().eventFilter(obj, event)
 
     def move_to_parent(self):
         if self.current_path:
@@ -70,15 +83,15 @@ class KeyboardFileManager(QMainWindow):
             self.update_panels()
 
     def move_cursor(self, step):
-        # Перемещение курсора в текущей панели
-        current_index = self.panels["center"].currentIndex()
+        current_index = self.panels['center'].currentIndex()
         new_index = self.model.index(current_index.row() + step, 0, current_index.parent())
         if new_index.isValid():
-            self.panels["center"].setCurrentIndex(new_index)
+            self.panels['center'].setCurrentIndex(new_index)
+            self.update_right_panel()
 
     def update_panels(self):
         if self.current_path:
-            self.panels["left"].setVisible(True)
+            self.panels["left"].setModel(self.model)
             # Получаем родительский путь
             dir_obj = QDir(self.current_path)
             if dir_obj.cdUp():  # Переходим на уровень выше
@@ -96,16 +109,32 @@ class KeyboardFileManager(QMainWindow):
                         self.panels['left'].setCurrentIndex(idx)
                         break
             else:
-                # Если мы в корне (cdUp вернул False)
+                # Если мы в корне диска (cdUp вернул False)
                 self.panels['left'].setRootIndex(self.model.index(""))
         else:
-            self.panels["left"].setVisible(False)
-            
+            # Очистка левой панели если в центральной панели уже выбор диска
+            self.panels['left'].setModel(QStandardItemModel())
+        
         # Центральная панель
         self.panels['center'].setRootIndex(self.model.index(self.current_path))
+        self.panels['center'].setFocus()
+        #self.select_first_item()
         
         # Правая панель (сбрасываем)
-        self.panels['right'].setRootIndex(self.model.index(""))
+        self.update_right_panel()
+
+    def update_right_panel(self):
+        temp_index = self.panels['center'].currentIndex()
+        if temp_index.isValid() and self.model.isDir(temp_index):
+            self.panels['right'].setRootIndex(temp_index)
+            print(self.model.filePath(temp_index))
+
+    def select_first_item(self):
+        current_index = self.model.index(self.current_path)
+        print(self.model.rowCount(current_index))
+        if self.model.rowCount(current_index) > 0:
+            idx = self.model.index(0, 0, current_index)
+            self.panels['center'].setCurrentIndex(idx)
     
 
 if __name__ == "__main__":
